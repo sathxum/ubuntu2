@@ -1,0 +1,64 @@
+name: Nexus Ubuntu VPS Deployment
+on: 
+  push:
+    branches: [ main, master ]
+    paths:
+      - '.github/workflows/nexus-deploy.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+      
+    - name: Setup Environment
+      run: |
+        echo -e "\e[36m╔════════════════════════════════════╗\e[0m"
+        echo -e "\e[36m║     NEXUS UBUNTU DEPLOYMENT v2.2   ║\e[0m"
+        echo -e "\e[36m╚════════════════════════════════════╝\e[0m"
+        
+    - name: Create SSH User Account
+      run: |
+        sudo useradd -m -s /bin/bash Silence
+        echo "Silence:Admin@123#" | sudo chpasswd
+        sudo usermod -aG sudo Silence
+        echo -e "\e[32m[SUCCESS] User Silence created successfully\e[0m"
+        
+    - name: Install & Configure Ngrok
+      run: |
+        curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/keyrings/ngrok.asc >/dev/null
+        echo "deb [signed-by=/etc/apt/keyrings/ngrok.asc] https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+        sudo apt-get update && sudo apt-get install ngrok -y
+        ngrok authtoken 3DW8vmwVo7aYezScEd3u5oxF1MD_3UMGtriR5TAzc9wRVhNS1
+        
+    - name: Start Ngrok Tunnel
+      run: |
+        nohup ngrok tcp 22 --log=stdout > ngrok.log &
+        sleep 10
+        
+    - name: Output Connection Details
+      run: |
+        echo -e "\e[32m[SUCCESS] Ngrok Tunnel Established!\e[0m"
+        export NGROK_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+        export NGROK_HOST=$(echo $NGROK_URL | sed 's/tcp:\/\///' | cut -d ':' -f 1)
+        export NGROK_PORT=$(echo $NGROK_URL | sed 's/tcp:\/\///' | cut -d ':' -f 2)
+        echo -e "\e[36m=====================================\e[0m"
+        echo -e "\e[36mConnect using Termius:\e[0m"
+        echo -e "\e[36mHost/IP     : $NGROK_HOST\e[0m"
+        echo -e "\e[36mPort        : $NGROK_PORT\e[0m"
+        echo -e "\e[36mUsername    : Silence\e[0m"
+        echo -e "\e[36mPassword    : Admin@123#\e[0m"
+        echo -e "\e[36mSSH Command : ssh -p $NGROK_PORT Silence@$NGROK_HOST\e[0m"
+        echo -e "\e[36m=====================================\e[0m"
+        
+    - name: Keep Alive
+      run: |
+        echo "Session active for 6 hours max..."
+        for i in {360..1}; do
+            echo "Time remaining: $i minutes"
+            sleep 60
+        done
